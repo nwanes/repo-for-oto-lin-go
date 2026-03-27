@@ -1,0 +1,59 @@
+name: Release Automation (FCM & RTDB)
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  deploy-updates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 1. Google Cloud ile Güvenli Kimlik Doğrulama
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}'
+          token_format: 'access_token'
+
+      # 2. Değişkenleri Hazırla (Sürüm Kodunu Ayıklama)
+      # Not: Tag isminin sadece sayı (örn: 18) olduğunu varsayıyorum. 
+      # Eğer v18 ise ${TAG_NAME#v} şeklinde temizlenebilir.
+      - name: Prepare Variables
+        id: vars
+        run: |
+          TAG_NAME=${{ github.event.release.tag_name }}
+          echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "url=https://github.com/nwanes/repo-for-oto-lin-go/releases/download/${TAG_NAME}/otolingo${TAG_NAME}.apk" >> $GITHUB_OUTPUT
+
+      # 3. Firebase RTDB Güncelleme (app_config altına yazar)
+      - name: Update Firebase RTDB
+        run: |
+          RTDB_URL="https://${{ secrets.FIREBASE_PROJECT_ID }}-default-rtdb.firebaseio.com/app_config.json"
+          
+          curl -X PATCH "$RTDB_URL?access_token=${{ steps.auth.outputs.access_token }}" \
+          -H "Content-Type: application/json" \
+          -d "{
+            \"latest_version_code\": \"${{ steps.vars.outputs.tag }}\",
+            \"github_link\": \"${{ steps.vars.outputs.url }}\"
+          }"
+
+      # 4. FCM Mesajı Gönderme (all konusuna veri gönderir)
+      - name: Send FCM Message
+        run: |
+          curl -X POST "https://fcm.googleapis.com/v1/projects/${{ secrets.FIREBASE_PROJECT_ID }}/messages:send" \
+          -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
+          -H "Content-Type: application/json" \
+          -d "{
+            \"message\": {
+              \"topic\": \"all\",
+              \"data\": {
+                \"title\": \"Önemli Güncelleme\",
+                \"body\": \"Güncellemek için tıklayınız\",
+                \"url\": \"${{ steps.vars.outputs.url }}\"
+              }
+            }
+          }"
