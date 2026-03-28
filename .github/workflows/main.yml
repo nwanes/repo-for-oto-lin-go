@@ -20,36 +20,28 @@ jobs:
           token_format: 'access_token'
 
       # 2. Değişkenleri Hazırla
-      # sed ile tag başındaki tüm harfler temizlenir: Beta18.6 → 18.6
       - name: Prepare Variables
         id: vars
         run: |
-          TAG_NAME="${{ github.event.release.tag_name }}"
-          VERSION=$(echo "$TAG_NAME" | sed 's/^[^0-9]*//')
-          BASE_URL="https://github.com/nwanes/repo-for-oto-lin-go/releases/download/${TAG_NAME}"
-          echo "tag=${TAG_NAME}" >> $GITHUB_OUTPUT
-          echo "url_stable=${BASE_URL}/otolingo${VERSION}.apk" >> $GITHUB_OUTPUT
-          echo "url_beta=${BASE_URL}/otolingo${VERSION}-beta.apk" >> $GITHUB_OUTPUT
+          TAG_NAME=${{ github.event.release.tag_name }}
+          echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "url=https://github.com/nwanes/repo-for-oto-lin-go/releases/download/${TAG_NAME}/otolingo${TAG_NAME}.apk" >> $GITHUB_OUTPUT
+          echo "is_prerelease=${{ github.event.release.prerelease }}" >> $GITHUB_OUTPUT
 
-      # Debug — üretilen linkleri logda görmek için
-      - name: Debug URLs
-        run: |
-          echo "url_stable: ${{ steps.vars.outputs.url_stable }}"
-          echo "url_beta:   ${{ steps.vars.outputs.url_beta }}"
-
-      # 3. Firebase RTDB Güncelleme — SADECE stabil sürümlerde
+      # 3. Firebase RTDB Güncelleme — SADECE stabil (pre-release olmayan) sürümlerde çalışır
       - name: Update Firebase RTDB
         if: ${{ github.event.release.prerelease == false }}
         run: |
           RTDB_URL="https://${{ secrets.FIREBASE_PROJECT_ID }}-default-rtdb.firebaseio.com/app_config.json"
+
           curl -X PATCH "$RTDB_URL?access_token=${{ steps.auth.outputs.access_token }}" \
           -H "Content-Type: application/json" \
           -d "{
             \"latest_version_code\": \"${{ steps.vars.outputs.tag }}\",
-            \"github_link\": \"${{ steps.vars.outputs.url_stable }}\"
+            \"github_link\": \"${{ steps.vars.outputs.url }}\"
           }"
 
-      # 4a. FCM — Stabil: "all" topiğine
+      # 4a. FCM — Stabil sürüm: "all" topiğine gönder
       - name: Send FCM Message (all topic — stable release)
         if: ${{ github.event.release.prerelease == false }}
         run: |
@@ -62,12 +54,12 @@ jobs:
               \"data\": {
                 \"title\": \"Önemli Güncelleme\",
                 \"body\": \"Güncellemek için tıklayınız\",
-                \"url\": \"${{ steps.vars.outputs.url_stable }}\"
+                \"url\": \"${{ steps.vars.outputs.url }}\"
               }
             }
           }"
 
-      # 4b. FCM — Pre-release: "beta" topiğine
+      # 4b. FCM — Pre-release: "beta" topiğine gönder
       - name: Send FCM Message (beta topic — pre-release)
         if: ${{ github.event.release.prerelease == true }}
         run: |
@@ -80,7 +72,7 @@ jobs:
               \"data\": {
                 \"title\": \"Yeni Beta Sürümü Yayında\",
                 \"body\": \"Yeni beta sürümü yayında! İndirmek için tıklayınız.\",
-                \"url\": \"${{ steps.vars.outputs.url_beta }}\"
+                \"url\": \"${{ steps.vars.outputs.url }}\"
               }
             }
           }"
