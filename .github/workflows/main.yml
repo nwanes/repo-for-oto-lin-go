@@ -25,8 +25,8 @@ jobs:
         run: |
           TAG_NAME=${{ github.event.release.tag_name }}
           echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
-          echo "url=https://github.com/nwanes/repo-for-oto-lin-go/releases/download/${TAG_NAME}/otolingo${TAG_NAME}.apk" >> $GITHUB_OUTPUT
-          echo "is_prerelease=${{ github.event.release.prerelease }}" >> $GITHUB_OUTPUT
+          echo "url_stable=https://github.com/nwanes/repo-for-oto-lin-go/releases/download/${TAG_NAME}/otolingo${TAG_NAME}.apk" >> $GITHUB_OUTPUT
+          echo "url_beta=https://github.com/nwanes/repo-for-oto-lin-go/releases/download/${TAG_NAME}/otolingo${TAG_NAME}-beta.apk" >> $GITHUB_OUTPUT
 
       # 3. Firebase RTDB Güncelleme — SADECE stabil (pre-release olmayan) sürümlerde çalışır
       - name: Update Firebase RTDB
@@ -38,7 +38,7 @@ jobs:
           -H "Content-Type: application/json" \
           -d "{
             \"latest_version_code\": \"${{ steps.vars.outputs.tag }}\",
-            \"github_link\": \"${{ steps.vars.outputs.url }}\"
+            \"github_link\": \"${{ steps.vars.outputs.url_stable }}\"
           }"
 
       # 4a. FCM — Stabil sürüm: "all" topiğine gönder
@@ -54,7 +54,7 @@ jobs:
               \"data\": {
                 \"title\": \"Önemli Güncelleme\",
                 \"body\": \"Güncellemek için tıklayınız\",
-                \"url\": \"${{ steps.vars.outputs.url }}\"
+                \"url\": \"${{ steps.vars.outputs.url_stable }}\"
               }
             }
           }"
@@ -72,7 +72,7 @@ jobs:
               \"data\": {
                 \"title\": \"Yeni Beta Sürümü Yayında\",
                 \"body\": \"Yeni beta sürümü yayında! İndirmek için tıklayınız.\",
-                \"url\": \"${{ steps.vars.outputs.url }}\"
+                \"url\": \"${{ steps.vars.outputs.url_beta }}\"
               }
             }
           }"
