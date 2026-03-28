@@ -3,6 +3,17 @@ name: Release Automation (FCM & RTDB)
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'APK tag adı (örn: 18.0 veya Beta18.6)'
+        required: true
+        type: string
+      is_prerelease:
+        description: 'Pre-release mi? (beta topicine gider, RTDB güncellenmez)'
+        required: true
+        type: boolean
+        default: false
 
 jobs:
   deploy-updates:
@@ -20,20 +31,26 @@ jobs:
           token_format: 'access_token'
 
       # 2. Değişkenleri Hazırla
+      # Otomatik çalışmada release event'inden, manuel çalışmada input'tan okur
       - name: Prepare Variables
         id: vars
         run: |
-          TAG_NAME=${{ github.event.release.tag_name }}
-          echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG_NAME="${{ github.event.inputs.tag_name }}"
+            IS_PRERELEASE="${{ github.event.inputs.is_prerelease }}"
+          else
+            TAG_NAME="${{ github.event.release.tag_name }}"
+            IS_PRERELEASE="${{ github.event.release.prerelease }}"
+          fi
+          echo "tag=${TAG_NAME}" >> $GITHUB_OUTPUT
           echo "url=https://github.com/nwanes/repo-for-oto-lin-go/releases/download/${TAG_NAME}/otolingo${TAG_NAME}.apk" >> $GITHUB_OUTPUT
-          echo "is_prerelease=${{ github.event.release.prerelease }}" >> $GITHUB_OUTPUT
+          echo "is_prerelease=${IS_PRERELEASE}" >> $GITHUB_OUTPUT
 
-      # 3. Firebase RTDB Güncelleme — SADECE stabil (pre-release olmayan) sürümlerde çalışır
+      # 3. Firebase RTDB Güncelleme — SADECE stabil sürümlerde
       - name: Update Firebase RTDB
-        if: ${{ github.event.release.prerelease == false }}
+        if: steps.vars.outputs.is_prerelease == 'false'
         run: |
           RTDB_URL="https://${{ secrets.FIREBASE_PROJECT_ID }}-default-rtdb.firebaseio.com/app_config.json"
-
           curl -X PATCH "$RTDB_URL?access_token=${{ steps.auth.outputs.access_token }}" \
           -H "Content-Type: application/json" \
           -d "{
@@ -41,9 +58,9 @@ jobs:
             \"github_link\": \"${{ steps.vars.outputs.url }}\"
           }"
 
-      # 4a. FCM — Stabil sürüm: "all" topiğine gönder
+      # 4a. FCM — Stabil: "all" topiğine
       - name: Send FCM Message (all topic — stable release)
-        if: ${{ github.event.release.prerelease == false }}
+        if: steps.vars.outputs.is_prerelease == 'false'
         run: |
           curl -X POST "https://fcm.googleapis.com/v1/projects/${{ secrets.FIREBASE_PROJECT_ID }}/messages:send" \
           -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
@@ -59,9 +76,9 @@ jobs:
             }
           }"
 
-      # 4b. FCM — Pre-release: "beta" topiğine gönder
+      # 4b. FCM — Pre-release: "beta" topiğine
       - name: Send FCM Message (beta topic — pre-release)
-        if: ${{ github.event.release.prerelease == true }}
+        if: steps.vars.outputs.is_prerelease == 'true'
         run: |
           curl -X POST "https://fcm.googleapis.com/v1/projects/${{ secrets.FIREBASE_PROJECT_ID }}/messages:send" \
           -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
