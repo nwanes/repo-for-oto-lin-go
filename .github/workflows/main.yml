@@ -20,13 +20,16 @@ jobs:
           token_format: 'access_token'
 
       # 2. Değişkenleri Hazırla
+      # TAG_NAME örn: Beta18.6 veya 18.6
+      # VERSION  → tag'den harf ön eki temizlenir: Beta18.6 → 18.6
       - name: Prepare Variables
         id: vars
         run: |
           TAG_NAME=${{ github.event.release.tag_name }}
+          VERSION=$(echo "$TAG_NAME" | sed 's/^[^0-9]*//')
           echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
-          echo "url_stable=https://github.com/nwanes/repo-for-oto-lin-go/releases/download/${TAG_NAME}/otolingo${TAG_NAME}.apk" >> $GITHUB_OUTPUT
-          echo "url_beta=https://github.com/nwanes/repo-for-oto-lin-go/releases/download/${TAG_NAME}/otolingo${TAG_NAME}-beta.apk" >> $GITHUB_OUTPUT
+          echo "url_stable=https://github.com/nwanes/repo-for-oto-lin-go/releases/download/${TAG_NAME}/otolingo${VERSION}.apk" >> $GITHUB_OUTPUT
+          echo "url_beta=https://github.com/nwanes/repo-for-oto-lin-go/releases/download/${TAG_NAME}/otolingo${VERSION}-beta.apk" >> $GITHUB_OUTPUT
 
       # 3. Firebase RTDB Güncelleme — SADECE stabil (pre-release olmayan) sürümlerde çalışır
       - name: Update Firebase RTDB
