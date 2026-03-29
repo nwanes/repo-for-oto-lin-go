@@ -93,3 +93,19 @@ jobs:
               }
             }
           }"
+
+      # 5. README.md Güncelleme — SADECE stabil sürümlerde
+      - name: Update README.md with new APK link
+        if: steps.vars.outputs.is_prerelease == 'false'
+        run: |
+          sed -i 's|https://github.com/nwanes/repo-for-oto-lin-go/releases/download/[^/]*/otolingo[^)]*\.apk|${{ steps.vars.outputs.url }}|g' README.md
+
+      # 6. Git Commit ve Push
+      - name: Commit and push README update
+        if: steps.vars.outputs.is_prerelease == 'false'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add README.md
+          git commit -m "chore: update APK download link to ${{ steps.vars.outputs.tag }}" || echo "No changes to commit"
+          git push
