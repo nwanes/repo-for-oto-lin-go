@@ -47,28 +47,28 @@ jobs:
           echo "is_prerelease=${IS_PRERELEASE}" >> $GITHUB_OUTPUT
 
       # 3. Firebase RTDB Güncelleme — HATA KONTROLÜ EKLENDİ
-      - name: Update Firebase RTDB
-        if: steps.vars.outputs.is_prerelease == 'false'
-        run: |
-          RTDB_URL="${{ secrets.FIREBASE_RTDB_URL }}/app_config.json?auth=${{ secrets.FIREBASE_DB_SECRET }}"
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH "$RTDB_URL?access_token=${{ steps.auth.outputs.access_token }}" \
-          -H "Content-Type: application/json" \
-          -d "{
-            \"latest_version_code\": \"${{ steps.vars.outputs.tag }}\",
-            \"github_link\": \"${{ steps.vars.outputs.url }}\"
-          }")
-          
-          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-          BODY=$(echo "$RESPONSE" | head -n-1)
-          
-          echo "RTDB Response: $BODY"
-          echo "HTTP Status: $HTTP_CODE"
-          
-          if [[ "$HTTP_CODE" != "200" ]]; then
-            echo "❌ RTDB güncelleme başarısız! HTTP Status: $HTTP_CODE"
-            exit 1
-          fi
-          echo "✅ RTDB başarıyla güncellendi"
+     - name: Update Firebase RTDB
+    if: steps.vars.outputs.is_prerelease == 'false'
+    run: |
+      RTDB_URL="${{ secrets.FIREBASE_RTDB_URL }}/app_config.json"
+      RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH "${RTDB_URL}?access_token=${{ steps.auth.outputs.access_token }}" \
+      -H "Content-Type: application/json" \
+      -d "{
+        \"latest_version_code\": \"${{ steps.vars.outputs.tag }}\",
+        \"github_link\": \"${{ steps.vars.outputs.url }}\"
+      }")
+      
+      HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+      BODY=$(echo "$RESPONSE" | head -n-1)
+      
+      echo "RTDB Response: $BODY"
+      echo "HTTP Status: $HTTP_CODE"
+      
+      if [[ "$HTTP_CODE" != "200" ]]; then
+        echo "❌ RTDB güncelleme başarısız! HTTP Status: $HTTP_CODE"
+        exit 1
+      fi
+      echo "✅ RTDB başarıyla güncellendi"
 
       # 4a. FCM — Stabil: "all" topiğine (HATA KONTROLÜ EKLENDİ)
       - name: Send FCM Message (all topic — stable release)
