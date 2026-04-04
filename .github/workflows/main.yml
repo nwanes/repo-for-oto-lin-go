@@ -15,6 +15,9 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: write
+
 jobs:
   deploy-updates:
     runs-on: ubuntu-latest
@@ -22,7 +25,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 1. Google Cloud ile Güvenli Kimlik Doğrulama
       - id: 'auth'
         name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v2'
@@ -30,8 +32,6 @@ jobs:
           credentials_json: '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}'
           token_format: 'access_token'
 
-      # 2. Değişkenleri Hazırla
-      # Otomatik çalışmada release event'inden, manuel çalışmada input'tan okur
       - name: Prepare Variables
         id: vars
         run: |
@@ -46,23 +46,35 @@ jobs:
           echo "url=https://github.com/nwanes/repo-for-oto-lin-go/releases/download/${TAG_NAME}/otolingo${TAG_NAME}.apk" >> $GITHUB_OUTPUT
           echo "is_prerelease=${IS_PRERELEASE}" >> $GITHUB_OUTPUT
 
-      # 3. Firebase RTDB Güncelleme — SADECE stabil sürümlerde
+      # 3. Firebase RTDB Güncelleme — HATA KONTROLÜ EKLENDİ
       - name: Update Firebase RTDB
         if: steps.vars.outputs.is_prerelease == 'false'
         run: |
           RTDB_URL="https://${{ secrets.FIREBASE_PROJECT_ID }}-default-rtdb.firebaseio.com/app_config.json"
-          curl -X PATCH "$RTDB_URL?access_token=${{ steps.auth.outputs.access_token }}" \
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH "$RTDB_URL?access_token=${{ steps.auth.outputs.access_token }}" \
           -H "Content-Type: application/json" \
           -d "{
             \"latest_version_code\": \"${{ steps.vars.outputs.tag }}\",
             \"github_link\": \"${{ steps.vars.outputs.url }}\"
-          }"
+          }")
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+          
+          echo "RTDB Response: $BODY"
+          echo "HTTP Status: $HTTP_CODE"
+          
+          if [[ "$HTTP_CODE" != "200" ]]; then
+            echo "❌ RTDB güncelleme başarısız! HTTP Status: $HTTP_CODE"
+            exit 1
+          fi
+          echo "✅ RTDB başarıyla güncellendi"
 
-      # 4a. FCM — Stabil: "all" topiğine
+      # 4a. FCM — Stabil: "all" topiğine (HATA KONTROLÜ EKLENDİ)
       - name: Send FCM Message (all topic — stable release)
         if: steps.vars.outputs.is_prerelease == 'false'
         run: |
-          curl -X POST "https://fcm.googleapis.com/v1/projects/${{ secrets.FIREBASE_PROJECT_ID }}/messages:send" \
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://fcm.googleapis.com/v1/projects/${{ secrets.FIREBASE_PROJECT_ID }}/messages:send" \
           -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
           -H "Content-Type: application/json" \
           -d "{
@@ -74,13 +86,25 @@ jobs:
                 \"url\": \"${{ steps.vars.outputs.url }}\"
               }
             }
-          }"
+          }")
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+          
+          echo "FCM Response: $BODY"
+          echo "HTTP Status: $HTTP_CODE"
+          
+          if [[ "$HTTP_CODE" != "200" ]]; then
+            echo "❌ FCM bildirimi gönderilemedi! HTTP Status: $HTTP_CODE"
+            exit 1
+          fi
+          echo "✅ FCM bildirimi başarıyla gönderildi"
 
       # 4b. FCM — Pre-release: "beta" topiğine
       - name: Send FCM Message (beta topic — pre-release)
         if: steps.vars.outputs.is_prerelease == 'true'
         run: |
-          curl -X POST "https://fcm.googleapis.com/v1/projects/${{ secrets.FIREBASE_PROJECT_ID }}/messages:send" \
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://fcm.googleapis.com/v1/projects/${{ secrets.FIREBASE_PROJECT_ID }}/messages:send" \
           -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
           -H "Content-Type: application/json" \
           -d "{
@@ -92,13 +116,32 @@ jobs:
                 \"url\": \"${{ steps.vars.outputs.url }}\"
               }
             }
-          }"
+          }")
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+          
+          echo "FCM Response: $BODY"
+          echo "HTTP Status: $HTTP_CODE"
+          
+          if [[ "$HTTP_CODE" != "200" ]]; then
+            echo "❌ FCM Beta bildirimi gönderilemedi! HTTP Status: $HTTP_CODE"
+            exit 1
+          fi
+          echo "✅ FCM Beta bildirimi başarıyla gönderildi"
 
-      # 5. README.md Güncelleme — SADECE stabil sürümlerde
+      # 5. README.md Güncelleme
       - name: Update README.md with new APK link
         if: steps.vars.outputs.is_prerelease == 'false'
         run: |
           sed -i 's|https://github.com/nwanes/repo-for-oto-lin-go/releases/download/[^/]*/otolingo[^)]*\.apk|${{ steps.vars.outputs.url }}|g' README.md
+          
+          if git diff --quiet README.md; then
+            echo "⚠️ README.md dosyasında değişiklik yapılacak bir şey bulunamadı"
+          else
+            echo "✅ README.md güncellendi:"
+            git diff README.md
+          fi
 
       # 6. Git Commit ve Push
       - name: Commit and push README update
@@ -107,5 +150,11 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add README.md
-          git commit -m "chore: update APK download link to ${{ steps.vars.outputs.tag }}" || echo "No changes to commit"
-          git push
+          
+          if git diff --cached --quiet; then
+            echo "⚠️ Commit edilecek değişiklik yok"
+          else
+            git commit -m "chore: update APK download link to ${{ steps.vars.outputs.tag }}"
+            git push origin HEAD:${{ github.ref }}
+            echo "✅ Değişiklikler başarıyla push edildi"
+          fi
