@@ -14,6 +14,14 @@ on:
         required: true
         type: boolean
         default: false
+      notification_title:
+        description: 'Bildirim başlığı (boş bırakılırsa varsayılan kullanılır)'
+        required: false
+        type: string
+      notification_body:
+        description: 'Bildirim metni (boş bırakılırsa varsayılan kullanılır)'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -39,13 +47,30 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             TAG_NAME="${{ github.event.inputs.tag_name }}"
             IS_PRERELEASE="${{ github.event.inputs.is_prerelease }}"
+            CUSTOM_TITLE="${{ github.event.inputs.notification_title }}"
+            CUSTOM_BODY="${{ github.event.inputs.notification_body }}"
           else
             TAG_NAME="${{ github.event.release.tag_name }}"
             IS_PRERELEASE="${{ github.event.release.prerelease }}"
+            CUSTOM_TITLE=""
+            CUSTOM_BODY=""
           fi
+
+          # Stable varsayılan
+          FINAL_TITLE_STABLE="${CUSTOM_TITLE:-Önemli Güncelleme}"
+          FINAL_BODY_STABLE="${CUSTOM_BODY:-Güncellemek için tıklayınız}"
+
+          # Beta varsayılan
+          FINAL_TITLE_BETA="${CUSTOM_TITLE:-Yeni Beta Sürümü Yayında}"
+          FINAL_BODY_BETA="${CUSTOM_BODY:-Yeni beta sürümü yayında! İndirmek için tıklayınız.}"
+
           echo "tag=${TAG_NAME}" >> $GITHUB_OUTPUT
           echo "url=https://github.com/nwanes/repo-for-oto-lin-go/releases/download/${TAG_NAME}/otolingo${TAG_NAME}.apk" >> $GITHUB_OUTPUT
           echo "is_prerelease=${IS_PRERELEASE}" >> $GITHUB_OUTPUT
+          echo "title_stable=${FINAL_TITLE_STABLE}" >> $GITHUB_OUTPUT
+          echo "body_stable=${FINAL_BODY_STABLE}" >> $GITHUB_OUTPUT
+          echo "title_beta=${FINAL_TITLE_BETA}" >> $GITHUB_OUTPUT
+          echo "body_beta=${FINAL_BODY_BETA}" >> $GITHUB_OUTPUT
 
       - name: Update Firebase RTDB
         if: steps.vars.outputs.is_prerelease == 'false'
@@ -77,8 +102,8 @@ jobs:
             \"message\": {
               \"topic\": \"all\",
               \"data\": {
-                \"title\": \"Önemli Güncelleme\",
-                \"body\": \"Güncellemek için tıklayınız\",
+                \"title\": \"${{ steps.vars.outputs.title_stable }}\",
+                \"body\": \"${{ steps.vars.outputs.body_stable }}\",
                 \"url\": \"${{ steps.vars.outputs.url }}\"
               }
             }
@@ -103,8 +128,8 @@ jobs:
             \"message\": {
               \"topic\": \"beta\",
               \"data\": {
-                \"title\": \"Yeni Beta Sürümü Yayında\",
-                \"body\": \"Yeni beta sürümü yayında! İndirmek için tıklayınız.\",
+                \"title\": \"${{ steps.vars.outputs.title_beta }}\",
+                \"body\": \"${{ steps.vars.outputs.body_beta }}\",
                 \"url\": \"${{ steps.vars.outputs.url }}\"
               }
             }
