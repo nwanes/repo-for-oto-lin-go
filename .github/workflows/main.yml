@@ -46,31 +46,26 @@ jobs:
           echo "url=https://github.com/nwanes/repo-for-oto-lin-go/releases/download/${TAG_NAME}/otolingo${TAG_NAME}.apk" >> $GITHUB_OUTPUT
           echo "is_prerelease=${IS_PRERELEASE}" >> $GITHUB_OUTPUT
 
-      # 3. Firebase RTDB Güncelleme — HATA KONTROLÜ EKLENDİ
-     - name: Update Firebase RTDB
-    if: steps.vars.outputs.is_prerelease == 'false'
-    run: |
-      RTDB_URL="${{ secrets.FIREBASE_RTDB_URL }}/app_config.json"
-      RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH "${RTDB_URL}?access_token=${{ steps.auth.outputs.access_token }}" \
-      -H "Content-Type: application/json" \
-      -d "{
-        \"latest_version_code\": \"${{ steps.vars.outputs.tag }}\",
-        \"github_link\": \"${{ steps.vars.outputs.url }}\"
-      }")
-      
-      HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-      BODY=$(echo "$RESPONSE" | head -n-1)
-      
-      echo "RTDB Response: $BODY"
-      echo "HTTP Status: $HTTP_CODE"
-      
-      if [[ "$HTTP_CODE" != "200" ]]; then
-        echo "❌ RTDB güncelleme başarısız! HTTP Status: $HTTP_CODE"
-        exit 1
-      fi
-      echo "✅ RTDB başarıyla güncellendi"
+      - name: Update Firebase RTDB
+        if: steps.vars.outputs.is_prerelease == 'false'
+        run: |
+          RTDB_URL="${{ secrets.FIREBASE_RTDB_URL }}/app_config.json"
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH "${RTDB_URL}?access_token=${{ steps.auth.outputs.access_token }}" \
+          -H "Content-Type: application/json" \
+          -d "{
+            \"latest_version_code\": \"${{ steps.vars.outputs.tag }}\",
+            \"github_link\": \"${{ steps.vars.outputs.url }}\"
+          }")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+          echo "RTDB Response: $BODY"
+          echo "HTTP Status: $HTTP_CODE"
+          if [[ "$HTTP_CODE" != "200" ]]; then
+            echo "❌ RTDB güncelleme başarısız! HTTP Status: $HTTP_CODE"
+            exit 1
+          fi
+          echo "✅ RTDB başarıyla güncellendi"
 
-      # 4a. FCM — Stabil: "all" topiğine (HATA KONTROLÜ EKLENDİ)
       - name: Send FCM Message (all topic — stable release)
         if: steps.vars.outputs.is_prerelease == 'false'
         run: |
@@ -87,20 +82,16 @@ jobs:
               }
             }
           }")
-          
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           BODY=$(echo "$RESPONSE" | head -n-1)
-          
           echo "FCM Response: $BODY"
           echo "HTTP Status: $HTTP_CODE"
-          
           if [[ "$HTTP_CODE" != "200" ]]; then
             echo "❌ FCM bildirimi gönderilemedi! HTTP Status: $HTTP_CODE"
             exit 1
           fi
           echo "✅ FCM bildirimi başarıyla gönderildi"
 
-      # 4b. FCM — Pre-release: "beta" topiğine
       - name: Send FCM Message (beta topic — pre-release)
         if: steps.vars.outputs.is_prerelease == 'true'
         run: |
@@ -117,25 +108,20 @@ jobs:
               }
             }
           }")
-          
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           BODY=$(echo "$RESPONSE" | head -n-1)
-          
           echo "FCM Response: $BODY"
           echo "HTTP Status: $HTTP_CODE"
-          
           if [[ "$HTTP_CODE" != "200" ]]; then
             echo "❌ FCM Beta bildirimi gönderilemedi! HTTP Status: $HTTP_CODE"
             exit 1
           fi
           echo "✅ FCM Beta bildirimi başarıyla gönderildi"
 
-      # 5. README.md Güncelleme
       - name: Update README.md with new APK link
         if: steps.vars.outputs.is_prerelease == 'false'
         run: |
           sed -i 's|https://github.com/nwanes/repo-for-oto-lin-go/releases/download/[^/]*/otolingo[^)]*\.apk|${{ steps.vars.outputs.url }}|g' README.md
-          
           if git diff --quiet README.md; then
             echo "⚠️ README.md dosyasında değişiklik yapılacak bir şey bulunamadı"
           else
@@ -143,14 +129,12 @@ jobs:
             git diff README.md
           fi
 
-      # 6. Git Commit ve Push
       - name: Commit and push README update
         if: steps.vars.outputs.is_prerelease == 'false'
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add README.md
-          
           if git diff --cached --quiet; then
             echo "⚠️ Commit edilecek değişiklik yok"
           else
