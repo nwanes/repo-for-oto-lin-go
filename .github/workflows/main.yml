@@ -50,8 +50,8 @@ jobs:
       - name: Update Firebase RTDB
         if: steps.vars.outputs.is_prerelease == 'false'
         run: |
-          RTDB_URL="${{ secrets.FIREBASE_RTDB_URL }}/app_config.json"
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH "${RTDB_URL}?access_token=${{ steps.auth.outputs.access_token }}" \
+          RTDB_URL="${{ secrets.FIREBASE_RTDB_URL }}/app_config.json?auth=${{ secrets.FIREBASE_DB_SECRET }}"
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH "$RTDB_URL" \
           -H "Content-Type: application/json" \
           -d "{
             \"latest_version_code\": \"${{ steps.vars.outputs.tag }}\",
